@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel Analytics Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- Google API client -->
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f0f4f8; --surface: #ffffff;
+  --primary: #1e40af; --primary-light: #3b82f6;
+  --accent: #0ea5e9; --green: #10b981; --amber: #f59e0b; --red: #ef4444;
+  --gray-100: #f1f5f9; --gray-200: #e2e8f0; --gray-400: #94a3b8;
+  --gray-600: #475569; --gray-800: #1e293b;
+  --radius: 12px; --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --font: 'Segoe UI', system-ui, sans-serif;
+}
+body { font-family: var(--font); background: var(--bg); color: var(--gray-800); min-height: 100vh; }
+
+/* ── Header ── */
+header {
+  background: linear-gradient(135deg, #1e40af, #1d4ed8);
+  color: #fff; padding: 16px 28px;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 4px 16px rgba(30,64,175,0.3); flex-wrap: wrap; gap: 10px;
+}
+header h1 { font-size: 1.3rem; font-weight: 700; }
+header h1 span { font-size: 0.75rem; opacity: 0.65; margin-left: 8px; font-weight: 400; }
+.hdr-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.hdr-btn {
+  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+  color: #fff; padding: 7px 16px; border-radius: 8px; cursor: pointer;
+  font-size: 0.82rem; font-weight: 600; transition: background 0.2s;
+  display: none;
+}
+.hdr-btn:hover { background: rgba(255,255,255,0.28); }
+
+/* ── Main ── */
+main { padding: 28px 28px; max-width: 1600px; margin: 0 auto; }
+
+/* ── Upload Section ── */
+#uploadSection { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; }
+.upload-card {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow-lg); padding: 44px 36px;
+  text-align: center; max-width: 560px; width: 100%;
+}
+.upload-card h2 { font-size: 1.45rem; margin-bottom: 6px; }
+.upload-card > p { color: var(--gray-600); font-size: 0.88rem; line-height: 1.6; margin-bottom: 28px; }
+
+/* Tabs */
+.tabs { display: flex; border-bottom: 2px solid var(--gray-200); margin-bottom: 24px; }
+.tab {
+  flex: 1; padding: 10px; cursor: pointer; font-size: 0.87rem; font-weight: 600;
+  color: var(--gray-400); border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: all 0.2s; text-align: center;
+}
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Drop Zone */
+.drop-zone {
+  border: 2px dashed var(--gray-200); border-radius: var(--radius);
+  padding: 28px 20px; cursor: pointer; transition: all 0.2s;
+  background: var(--gray-100);
+}
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--primary-light); background: #eff6ff; }
+.drop-zone p { color: var(--gray-600); font-size: 0.88rem; margin-top: 8px; }
+#fileInput { display: none; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 22px; border-radius: 8px; cursor: pointer;
+  font-size: 0.88rem; font-weight: 600; transition: all 0.2s; border: none;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-google {
+  background: #fff; color: var(--gray-800);
+  border: 1.5px solid var(--gray-200); width: 100%; justify-content: center;
+  padding: 11px;
+}
+.btn-google:hover { background: var(--gray-100); border-color: var(--gray-400); }
+.btn-google img { width: 18px; height: 18px; }
+
+/* Drive picker area */
+#driveStatus { margin-top: 14px; font-size: 0.82rem; color: var(--gray-400); text-align: center; }
+.drive-connected { color: var(--green) !important; font-weight: 600; }
+
+/* Drive file list */
+#driveFileList {
+  margin-top: 16px; text-align: left; max-height: 220px;
+  overflow-y: auto; border: 1px solid var(--gray-200); border-radius: 8px;
+  display: none;
+}
+.drive-file {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  cursor: pointer; border-bottom: 1px solid var(--gray-100);
+  transition: background 0.15s; font-size: 0.85rem;
+}
+.drive-file:last-child { border-bottom: none; }
+.drive-file:hover { background: #eff6ff; }
+.drive-file span.icon { font-size: 1.2rem; }
+.drive-file span.name { flex: 1; color: var(--gray-800); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drive-file span.date { color: var(--gray-400); font-size: 0.75rem; white-space: nowrap; }
+
+/* Search box */
+.search-box {
+  display: flex; gap: 8px; margin-top: 14px;
+}
+.search-box input {
+  flex: 1; padding: 8px 12px; border: 1px solid var(--gray-200);
+  border-radius: 8px; font-size: 0.85rem; color: var(--gray-800);
+  background: var(--gray-100);
+}
+.search-box input:focus { outline: 2px solid var(--primary-light); }
+.search-box button { flex-shrink: 0; }
+
+/* ── Controls ── */
+#controlsBar {
+  display: none; background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 14px 18px;
+  margin-bottom: 22px; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.ctrl-group { display: flex; flex-direction: column; gap: 3px; }
+.ctrl-group label { font-size: 0.7rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; }
+.ctrl-group select {
+  background: var(--gray-100); border: 1px solid var(--gray-200);
+  border-radius: 8px; padding: 7px 11px; font-size: 0.86rem; color: var(--gray-800);
+  cursor: pointer; min-width: 130px;
+}
+.ctrl-sep { width: 1px; height: 36px; background: var(--gray-200); }
+#reloadBtn {
+  margin-left: auto; background: var(--gray-100); border: 1px solid var(--gray-200);
+  color: var(--gray-600); padding: 7px 14px; border-radius: 8px;
+  cursor: pointer; font-size: 0.83rem; font-weight: 600; transition: all 0.2s;
+}
+#reloadBtn:hover { background: var(--gray-200); }
+
+/* ── KPI Row ── */
+#kpiRow { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.kpi-card {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 18px 20px;
+  border-left: 4px solid var(--primary-light);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.kpi-label { font-size: 0.72rem; color: var(--gray-400); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.kpi-value { font-size: 1.75rem; font-weight: 700; color: var(--gray-800); line-height: 1; }
+.kpi-sub { font-size: 0.75rem; color: var(--gray-400); }
+
+/* ── Charts Grid ── */
+#chartsGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 18px; }
+.chart-card {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 20px 22px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.chart-card.wide { grid-column: 1 / -1; }
+.chart-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.chart-title { font-size: 0.93rem; font-weight: 700; }
+.chart-subtitle { font-size: 0.73rem; color: var(--gray-400); margin-top: 2px; }
+.chart-badge { font-size: 0.68rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; background: var(--gray-100); color: var(--gray-600); }
+.chart-wrap { position: relative; height: 250px; }
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.81rem; }
+th { background: var(--gray-100); color: var(--gray-600); font-weight: 700; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.05em; padding: 9px 11px; text-align: left; border-bottom: 2px solid var(--gray-200); }
+td { padding: 8px 11px; border-bottom: 1px solid var(--gray-100); }
+tr:hover td { background: var(--gray-100); }
+.bar-cell { position: relative; min-width: 110px; }
+.bar-bg { position: absolute; left: 0; top: 50%; transform: translateY(-50%); height: 55%; border-radius: 3px; opacity: 0.16; z-index: 0; background: var(--primary-light); }
+.bar-cell span { position: relative; z-index: 1; }
+
+/* ── Executive Mode ── */
+#execMode { display: none; position: fixed; inset: 0; background: #0f172a; z-index: 1000; overflow-y: auto; }
+.exec-header { background: rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.1); padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; color: #fff; }
+.exec-header h2 { font-size: 1.15rem; font-weight: 700; }
+.exec-header p { font-size: 0.75rem; opacity: 0.55; margin-top: 2px; }
+#closeExec { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 0.83rem; }
+#closeExec:hover { background: rgba(255,255,255,0.2); }
+#execGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 18px; padding: 24px 28px; }
+.exec-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 14px; padding: 0 28px 4px; }
+.exec-kpi { background: rgba(255,255,255,0.06); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); padding: 14px 16px; }
+.exec-kpi .kpi-label { color: rgba(255,255,255,0.45); }
+.exec-kpi .kpi-value { color: #fff; font-size: 1.5rem; }
+.exec-kpi .kpi-sub { color: rgba(255,255,255,0.35); }
+.exec-card { background: rgba(255,255,255,0.06); border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.08); padding: 20px; }
+.exec-card .chart-title { color: rgba(255,255,255,0.9); }
+.exec-card .chart-subtitle { color: rgba(255,255,255,0.4); }
+
+/* ── Loading ── */
+#loadingOverlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 500; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+.spinner { width: 46px; height: 46px; border: 4px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+.loading-msg { color: #fff; font-size: 0.88rem; opacity: 0.8; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 680px) {
+  main { padding: 14px; }
+  #chartsGrid { grid-template-columns: 1fr; }
+  #execGrid { grid-template-columns: 1fr; padding: 14px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 Excel Analytics Dashboard <span>+ Google Drive</span></h1>
+  <div class="hdr-actions">
+    <button class="hdr-btn" id="execBtn" onclick="toggleExec()">🖥 Vista Ejecutiva</button>
+    <button class="hdr-btn" id="reloadBtnHdr" onclick="resetApp()">⬆ Nuevo archivo</button>
+  </div>
+</header>
+
+<main>
+  <!-- ── Upload ── -->
+  <div id="uploadSection">
+    <div class="upload-card">
+      <div style="font-size:3rem;margin-bottom:12px">📊</div>
+      <h2>Excel Analytics Dashboard</h2>
+      <p>Carga tu archivo desde tu computadora o conéctate a Google Drive para seleccionarlo directamente.</p>
+
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('local')">💻 Archivo local</div>
+        <div class="tab" onclick="switchTab('drive')">☁️ Google Drive</div>
+      </div>
+
+      <!-- Tab Local -->
+      <div class="tab-panel active" id="tab-local">
+        <div class="drop-zone" id="dropZone">
+          <div style="font-size:2rem">📄</div>
+          <p>Arrastra y suelta tu archivo .xlsx / .xls / .csv aquí</p>
+          <button class="btn btn-primary" style="margin-top:12px" onclick="document.getElementById('fileInput').click()">
+            ⬆ Seleccionar archivo
+          </button>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+      </div>
+
+      <!-- Tab Drive -->
+      <div class="tab-panel" id="tab-drive">
+        <button class="btn btn-google" id="driveLoginBtn" onclick="driveSignIn()">
+          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#4285F4" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#34A853" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#EA4335" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          Conectar con Google Drive
+        </button>
+        <div id="driveStatus">No conectado</div>
+
+        <div class="search-box" id="driveSearch" style="display:none">
+          <input type="text" id="driveSearchInput" placeholder="Buscar archivo en Drive..." onkeydown="if(event.key==='Enter')searchDrive()">
+          <button class="btn btn-primary" onclick="searchDrive()">🔍</button>
+        </div>
+
+        <div id="driveFileList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Controls ── -->
+  <div id="controlsBar">
+    <div class="ctrl-group">
+      <label>Hoja</label>
+      <select id="sheetSelect" onchange="switchSheet()"></select>
+    </div>
+    <div class="ctrl-sep"></div>
+    <div class="ctrl-group">
+      <label>Eje X / Categoría</label>
+      <select id="xCol" onchange="renderAll()"></select>
+    </div>
+    <div class="ctrl-group">
+      <label>Eje Y / Valor</label>
+      <select id="yCol" onchange="renderAll()"></select>
+    </div>
+  </div>
+
+  <div id="kpiRow"></div>
+  <div id="chartsGrid"></div>
+</main>
+
+<!-- Executive Mode -->
+<div id="execMode">
+  <div class="exec-header">
+    <div><h2>🖥 Vista Ejecutiva</h2><p id="execSubtitle"></p></div>
+    <button id="closeExec" onclick="toggleExec()">✕ Cerrar</button>
+  </div>
+  <div class="exec-kpis" id="execKpis"></div>
+  <div id="execGrid"></div>
+</div>
+
+<!-- Loading -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-msg" id="loadingMsg">Procesando...</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  CONFIG — reemplaza con tu Client ID real
+// ══════════════════════════════════════════
+const CLIENT_ID = '948172138180-m8no0d6qleurdv8hd6frira5hrpotpqd.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+const DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+
+// ══════════════════════════════════════════
+//  ESTADO GLOBAL
+// ══════════════════════════════════════════
+let wb = null, currentSheet = '', rawData = [], headers = [], colTypes = {};
+let execOpen = false, tokenClient = null, accessToken = null;
+const chartInstances = {};
+const PALETTE = ['#1e40af','#3b82f6','#0ea5e9','#10b981','#6366f1','#8b5cf6','#f59e0b','#ef4444','#0891b2','#059669'];
+
+// ══════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (i === 0 && tab === 'local') || (i === 1 && tab === 'drive')));
+  document.getElementById('tab-local').classList.toggle('active', tab === 'local');
+  document.getElementById('tab-drive').classList.toggle('active', tab === 'drive');
+}
+
+// ══════════════════════════════════════════
+//  CARGA LOCAL
+// ══════════════════════════════════════════
+const fileInput = document.getElementById('fileInput');
+const dropZone  = document.getElementById('dropZone');
+
+fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); loadFile(e.dataTransfer.files[0]); });
+
+function loadFile(file) {
+  if (!file) return;
+  showLoading(true, 'Leyendo archivo...');
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      wb = ext === 'csv'
+        ? XLSX.read(e.target.result, { type: 'string' })
+        : XLSX.read(e.target.result, { type: 'array', cellDates: true });
+      setupSheets();
+      showDashboard();
+    } catch(err) { alert('Error leyendo el archivo: ' + err.message); }
+    showLoading(false);
+  };
+  ext === 'csv' ? reader.readAsText(file) : reader.readAsArrayBuffer(file);
+}
+
+// ══════════════════════════════════════════
+//  GOOGLE DRIVE AUTH (OAuth 2.0 + GAPI)
+// ══════════════════════════════════════════
+let gapiReady = false, gsiReady = false;
+
+window.onload = () => {
+  // Cargar GAPI
+  gapi.load('client', async () => {
+    await gapi.client.init({ discoveryDocs: [DISCOVERY] });
+    gapiReady = true;
+    tryInitTokenClient();
+  });
+};
+
+// GSI cargado
+function gsiLoaded() { gsiReady = true; tryInitTokenClient(); }
+
+function tryInitTokenClient() {
+  if (!gapiReady || !gsiReady) return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { console.error(resp); return; }
+      accessToken = resp.access_token;
+      gapi.client.setToken({ access_token: accessToken });
+      onDriveConnected();
+    }
+  });
+}
+
+// Botón conectar Drive
+function driveSignIn() {
+  if (!tokenClient) { alert('Google API aún cargando, espera un momento.'); return; }
+  tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+function onDriveConnected() {
+  document.getElementById('driveLoginBtn').style.display = 'none';
+  const st = document.getElementById('driveStatus');
+  st.textContent = '✅ Conectado a Google Drive';
+  st.className = 'drive-connected';
+  document.getElementById('driveSearch').style.display = 'flex';
+  listDriveFiles('');
+}
+
+// ── Listar / buscar archivos Excel en Drive ──
+async function listDriveFiles(q) {
+  showLoading(true, 'Buscando en Drive...');
+  try {
+    const query = q
+      ? `name contains '${q}' and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel' or mimeType='text/csv') and trashed=false`
+      : `(mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel' or mimeType='text/csv') and trashed=false`;
+
+    const res = await gapi.client.drive.files.list({
+      q: query,
+      pageSize: 20,
+      fields: 'files(id,name,modifiedTime,size)',
+      orderBy: 'modifiedTime desc'
+    });
+
+    renderFileList(res.result.files || []);
+  } catch(e) {
+    console.error(e);
+    alert('Error al listar archivos de Drive.');
+  }
+  showLoading(false);
+}
+
+function searchDrive() {
+  const q = document.getElementById('driveSearchInput').value.trim();
+  listDriveFiles(q);
+}
+
+function renderFileList(files) {
+  const list = document.getElementById('driveFileList');
+  list.style.display = 'block';
+  if (!files.length) { list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--gray-400);font-size:0.85rem">No se encontraron archivos Excel en Drive.</div>'; return; }
+  list.innerHTML = files.map(f => {
+    const date = new Date(f.modifiedTime).toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'2-digit' });
+    const ext  = f.name.split('.').pop().toLowerCase();
+    const icon = ext === 'csv' ? '📄' : '📊';
+    return `<div class="drive-file" onclick="downloadDriveFile('${f.id}','${f.name.replace(/'/g,"\\'")}')">
+      <span class="icon">${icon}</span>
+      <span class="name">${f.name}</span>
+      <span class="date">${date}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Descargar y leer archivo de Drive ──
+async function downloadDriveFile(fileId, fileName) {
+  showLoading(true, `Descargando "${fileName}"...`);
+  try {
+    const res = await gapi.client.drive.files.get({
+      fileId,
+      alt: 'media'
+    }, { responseType: 'arraybuffer' });
+
+    const ext = fileName.split('.').pop().toLowerCase();
+    let data = res.body;
+
+    // gapi devuelve string binario; convertir a ArrayBuffer
+    if (typeof data === 'string') {
+      const buf = new ArrayBuffer(data.length);
+      const view = new Uint8Array(buf);
+      for (let i = 0; i < data.length; i++) view[i] = data.charCodeAt(i) & 0xff;
+      data = buf;
+    }
+
+    wb = ext === 'csv'
+      ? XLSX.read(new TextDecoder().decode(data), { type: 'string' })
+      : XLSX.read(data, { type: 'array', cellDates: true });
+
+    setupSheets();
+    showDashboard();
+  } catch(e) {
+    console.error(e);
+    alert('Error al descargar el archivo de Drive: ' + (e.result?.error?.message || e.message || e));
+  }
+  showLoading(false);
+}
+
+// ══════════════════════════════════════════
+//  SHEET SETUP
+// ══════════════════════════════════════════
+function setupSheets() {
+  const sel = document.getElementById('sheetSelect');
+  sel.innerHTML = '';
+  wb.SheetNames.forEach(n => { const o = document.createElement('option'); o.value = o.textContent = n; sel.appendChild(o); });
+  currentSheet = wb.SheetNames[0];
+  processSheet();
+}
+
+function switchSheet() { currentSheet = document.getElementById('sheetSelect').value; processSheet(); }
+
+function processSheet() {
+  const ws = wb.Sheets[currentSheet];
+  rawData = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  if (!rawData.length) return;
+  headers = Object.keys(rawData[0]);
+  detectTypes();
+  populateCols();
+  renderAll();
+}
+
+function detectTypes() {
+  colTypes = {};
+  headers.forEach(h => {
+    const vals = rawData.map(r => r[h]).filter(v => v !== '' && v != null);
+    const num  = vals.filter(v => typeof v === 'number' || (!isNaN(Number(v)) && String(v).trim())).length;
+    const date = vals.filter(v => v instanceof Date || (typeof v === 'string' && /^\d{4}[-/]/.test(v))).length;
+    colTypes[h] = date/vals.length > 0.5 ? 'date' : num/vals.length > 0.6 ? 'numeric' : 'string';
+  });
+}
+
+function populateCols() {
+  const num = headers.filter(h => colTypes[h] === 'numeric');
+  const cat = headers.filter(h => colTypes[h] !== 'numeric');
+  fillSelect('xCol', cat.length ? cat : headers, cat[0] || headers[0]);
+  fillSelect('yCol', num.length ? num : headers, num[0] || headers[headers.length-1]);
+}
+
+function fillSelect(id, opts, def) {
+  const s = document.getElementById(id);
+  s.innerHTML = '';
+  opts.forEach(o => { const el = document.createElement('option'); el.value = el.textContent = o; if(o===def) el.selected=true; s.appendChild(el); });
+}
+
+// ══════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════
+function renderAll() {
+  const x = document.getElementById('xCol').value, y = document.getElementById('yCol').value;
+  destroyCharts();
+  renderKPIs(y);
+  renderCharts(x, y);
+}
+
+function renderKPIs(yCol) {
+  const cols = headers.filter(h => colTypes[h] === 'numeric').slice(0, 5);
+  const el = document.getElementById('kpiRow');
+  el.innerHTML = '';
+  const colors = ['#1e40af','#0ea5e9','#10b981','#6366f1','#f59e0b'];
+  cols.forEach((col, i) => {
+    const vals = rawData.map(r => Number(r[col])).filter(n => !isNaN(n));
+    const sum = vals.reduce((a,b)=>a+b,0), avg = sum/vals.length, max = Math.max(...vals);
+    el.innerHTML += `<div class="kpi-card" style="border-left-color:${colors[i]}">
+      <div class="kpi-label">${col}</div>
+      <div class="kpi-value">${fmt(sum)}</div>
+      <div class="kpi-sub">Prom: ${fmt(avg)} · Máx: ${fmt(max)}</div>
+    </div>`;
+  });
+}
+
+function renderCharts(x, y) {
+  const g = document.getElementById('chartsGrid'); g.innerHTML = '';
+  const num = headers.filter(h => colTypes[h]==='numeric');
+  const date= headers.filter(h => colTypes[h]==='date');
+  addCard(g,'bar_main',`${x} por ${y}`,'Comparación','Barras',()=>buildBar(x,y,'bar_main'));
+  if (date.length && num.length) addCard(g,'line_t',`Evolución: ${num[0]}`,'Serie temporal','Línea',()=>buildLine(date[0],num[0],'line_t'));
+  else addCard(g,'line_m',`Tendencia: ${y}`,'Serie','Línea',()=>buildLine(x,y,'line_m'));
+  addCard(g,'donut',`Distribución: ${y}`,'Participación','Donut',()=>buildDonut(x,y,'donut'));
+  if (num.length>=2) addCard(g,'multi',`Comparativa`,'Múltiples métricas','Multi-barras',()=>buildMulti(x,num.slice(0,3),'multi'));
+  addTable(g,x,y);
+}
+
+function addCard(parent, id, title, sub, badge, fn) {
+  const d = document.createElement('div'); d.className='chart-card';
+  d.innerHTML=`<div class="chart-header"><div><div class="chart-title">${title}</div><div class="chart-subtitle">${sub}</div></div><span class="chart-badge">${badge}</span></div><div class="chart-wrap"><canvas id="${id}"></canvas></div>`;
+  parent.appendChild(d); fn();
+}
+
+// ── Chart builders ──
+function groupBy(x,y,top=15) {
+  const m={};
+  rawData.forEach(r=>{const k=String(r[x]??'').trim()||'N/A',v=Number(r[y]);if(!isNaN(v))m[k]=(m[k]||0)+v;});
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,top);
+}
+
+function buildBar(x,y,id) {
+  const e=groupBy(x,y),l=e.map(([k])=>k),v=e.map(([,n])=>n);
+  chartInstances[id]=new Chart(document.getElementById(id),{type:'bar',data:{labels:l,datasets:[{label:y,data:v,backgroundColor:l.map((_,i)=>PALETTE[i%PALETTE.length]+'cc'),borderColor:l.map((_,i)=>PALETTE[i%PALETTE.length]),borderWidth:1,borderRadius:5}]},options:baseOpts(y)});
+}
+
+function buildLine(x,y,id) {
+  const e=groupBy(x,y,20),l=e.map(([k])=>k),v=e.map(([,n])=>n);
+  chartInstances[id]=new Chart(document.getElementById(id),{type:'line',data:{labels:l,datasets:[{label:y,data:v,borderColor:'#1e40af',backgroundColor:'rgba(30,64,175,0.08)',borderWidth:2.5,pointRadius:4,fill:true,tension:0.35}]},options:baseOpts(y)});
+}
+
+function buildDonut(x,y,id) {
+  const e=groupBy(x,y,8),l=e.map(([k])=>k),v=e.map(([,n])=>n);
+  chartInstances[id]=new Chart(document.getElementById(id),{type:'doughnut',data:{labels:l,datasets:[{data:v,backgroundColor:PALETTE.slice(0,v.length).map(c=>c+'dd'),borderColor:'#fff',borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11},color:'#475569',boxWidth:14}},tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${fmt(ctx.parsed)}`}}},cutout:'62%'}});
+}
+
+function buildMulti(x,yCols,id) {
+  const labels=[...new Set(rawData.map(r=>String(r[x]??'').trim()))].slice(0,12);
+  const ds=yCols.map((col,i)=>({label:col,data:labels.map(lbl=>rawData.filter(r=>String(r[x]??'').trim()===lbl).reduce((s,r)=>s+(Number(r[col])||0),0)),backgroundColor:PALETTE[i]+'cc',borderColor:PALETTE[i],borderWidth:1,borderRadius:4}));
+  chartInstances[id]=new Chart(document.getElementById(id),{type:'bar',data:{labels,datasets:ds},options:{...baseOpts(''),plugins:{legend:{labels:{font:{size:11},color:'#475569'}}}}});
+}
+
+function addTable(parent,x,y) {
+  const e=groupBy(x,y,20),total=e.reduce((s,[,v])=>s+v,0),maxV=Math.max(...e.map(([,v])=>v));
+  const d=document.createElement('div'); d.className='chart-card wide';
+  d.innerHTML=`<div class="chart-header"><div><div class="chart-title">Tabla Resumen: ${x} → ${y}</div><div class="chart-subtitle">Top ${e.length} · Total: ${fmt(total)}</div></div><span class="chart-badge">Tabla</span></div>
+  <div class="table-wrap"><table><thead><tr><th>#</th><th>${x}</th><th style="text-align:right">${y}</th><th style="text-align:right">%</th><th>Barra</th></tr></thead><tbody>${
+    e.map(([k,v],i)=>{const pct=(v/total*100).toFixed(1),bar=(v/maxV*100).toFixed(0);
+      return `<tr><td style="color:var(--gray-400);font-size:0.74rem">${i+1}</td><td><strong>${k}</strong></td><td style="text-align:right;font-weight:600">${fmt(v)}</td><td style="text-align:right;color:var(--gray-600)">${pct}%</td><td class="bar-cell"><div class="bar-bg" style="width:${bar}%"></div><span style="font-size:0.74rem;color:var(--gray-600)">${bar}%</span></td></tr>`;
+    }).join('')
+  }</tbody></table></div>`;
+  parent.appendChild(d);
+}
+
+// ══════════════════════════════════════════
+//  VISTA EJECUTIVA
+// ══════════════════════════════════════════
+function toggleExec() {
+  execOpen=!execOpen;
+  document.getElementById('execMode').style.display=execOpen?'block':'none';
+  if(execOpen) buildExec(); else destroyExecCharts();
+}
+
+function buildExec() {
+  const x=document.getElementById('xCol').value,y=document.getElementById('yCol').value;
+  const num=headers.filter(h=>colTypes[h]==='numeric').slice(0,4);
+  document.getElementById('execSubtitle').textContent=`${currentSheet} · ${rawData.length} registros · ${headers.length} columnas`;
+  const ek=document.getElementById('execKpis'); ek.innerHTML='';
+  const colors=['#3b82f6','#0ea5e9','#10b981','#8b5cf6'];
+  num.forEach((col,i)=>{
+    const vals=rawData.map(r=>Number(r[col])).filter(n=>!isNaN(n));
+    const sum=vals.reduce((a,b)=>a+b,0);
+    ek.innerHTML+=`<div class="exec-kpi" style="border-left:3px solid ${colors[i]}"><div class="kpi-label">${col}</div><div class="kpi-value">${fmt(sum)}</div><div class="kpi-sub">Prom: ${fmt(sum/vals.length)}</div></div>`;
+  });
+  const g=document.getElementById('execGrid'); g.innerHTML='';
+  const addE=(id,t,s,b,fn)=>{const d=document.createElement('div');d.className='exec-card';d.innerHTML=`<div class="chart-header" style="margin-bottom:10px"><div><div class="chart-title">${t}</div><div class="chart-subtitle">${s}</div></div><span class="chart-badge" style="background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6)">${b}</span></div><div class="chart-wrap"><canvas id="${id}"></canvas></div>`;g.appendChild(d);fn(id);};
+  addE('ex_bar',`${x} por ${y}`,'Comparación','Barras',id=>buildBar(x,y,id));
+  addE('ex_line',`Tendencia: ${y}`,'Serie','Línea',id=>buildLine(x,y,id));
+  addE('ex_donut',`Distribución: ${y}`,'Participación','Donut',id=>buildDonut(x,y,id));
+  if(num.length>=2) addE('ex_multi','Comparativa',num.slice(0,3).join(' · '),'Multi',id=>buildMulti(x,num.slice(0,3),id));
+}
+
+function destroyExecCharts() {
+  ['ex_bar','ex_line','ex_donut','ex_multi'].forEach(id=>{if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id];}});
+}
+
+// ══════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════
+function showDashboard() {
+  document.getElementById('uploadSection').style.display='none';
+  document.getElementById('controlsBar').style.display='flex';
+  document.getElementById('execBtn').style.display='inline-flex';
+  document.getElementById('reloadBtnHdr').style.display='inline-flex';
+}
+
+function destroyCharts() {
+  Object.keys(chartInstances).filter(id=>!id.startsWith('ex_')).forEach(id=>{chartInstances[id].destroy();delete chartInstances[id];});
+}
+
+function baseOpts(yL) {
+  return {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label||yL}: ${fmt(ctx.parsed.y??ctx.parsed)}`}}},scales:{x:{grid:{display:false},ticks:{font:{size:11},color:'#94a3b8',maxRotation:35}},y:{grid:{color:'#f1f5f9'},ticks:{font:{size:11},color:'#94a3b8',callback:v=>fmt(v)}}}};
+}
+
+function fmt(n) {
+  if(n==null||isNaN(n))return'—';
+  if(Math.abs(n)>=1e9)return(n/1e9).toFixed(1)+'B';
+  if(Math.abs(n)>=1e6)return(n/1e6).toFixed(1)+'M';
+  if(Math.abs(n)>=1e3)return(n/1e3).toFixed(1)+'K';
+  return Number.isInteger(n)?n.toString():n.toFixed(2);
+}
+
+function showLoading(v,msg='') {
+  document.getElementById('loadingOverlay').style.display=v?'flex':'none';
+  if(msg) document.getElementById('loadingMsg').textContent=msg;
+}
+
+function resetApp() {
+  wb=null;rawData=[];headers=[];colTypes={};
+  destroyCharts();destroyExecCharts();
+  document.getElementById('uploadSection').style.display='flex';
+  document.getElementById('controlsBar').style.display='none';
+  document.getElementById('execBtn').style.display='none';
+  document.getElementById('reloadBtnHdr').style.display='none';
+  document.getElementById('kpiRow').innerHTML='';
+  document.getElementById('chartsGrid').innerHTML='';
+  document.getElementById('fileInput').value='';
+  if(execOpen){execOpen=false;document.getElementById('execMode').style.display='none';}
+}
+</script>
+
+<!-- Callback cuando carga GSI -->
+<script>
+  window.addEventListener('load', () => {
+    if (typeof google !== 'undefined' && google.accounts) gsiLoaded();
+    else document.querySelector('script[src*="gsi"]').addEventListener('load', gsiLoaded);
+  });
+</script>
+
+</body>
+</html>
